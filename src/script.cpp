@@ -1,4 +1,4 @@
-#include "include/Script.h"
+#include <ascript/script.h>
 #include <istream>
 #include <vector>
 

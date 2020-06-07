@@ -3,7 +3,7 @@
 #include "parser/ASLexer.h"
 #include "parser/ASBaseVisitor.h"
 
-#include "include/Script.h"
+#include <ascript/script.h>
 
 #define BINOP return expp(new BinOpExp(ctx->op->getText(), visit(ctx->exp(0)), visit(ctx->exp(1))))
 #define UNOP return expp(new UnOpExp(ctx->op->getText(), visit(ctx->exp())))

@@ -3,13 +3,11 @@ VARS_OLD := $(.VARIABLES)
 DEPSDIR = .deps
 OBJDIR = .obj
 SRCDIR = src
-INCLUDEDIR = $(SRCDIR)/include
 DISTDIR = dist
-TESTDIR = grammar_tests
+GRAMMARTESTDIR = grammar_tests
+TESTDIR = tests
 
-DEPFLAGS=-MT $@ -MMD -MP -MF $(DEPSDIR)/$*.d
-FLAGS=-I/usr/include/antlr4-runtime/ -g -std=c++17
-LIBS=
+FLAGS = -g -std=c++17 -I/usr/include/antlr4-runtime/ -I$(SRCDIR)/include/
 
 GRAMMARS = AS
 GRAMMARFILES = $(patsubst %, %.g4, ${GRAMMARS})
@@ -19,12 +17,11 @@ PARSER = $(patsubst %, %Parser, ${GRAMMARS}) $(patsubst %, %Lexer, ${GRAMMARS})
 PARSERH = $(patsubst %, $(PARSERDIR)/%.h, $(PARSER))
 PARSERSRC = $(patsubst %, $(PARSERDIR)/%.cpp, $(PARSER))
 
-SRC = script ASTGen
+SRC = $(patsubst $(SRCDIR)/%.cpp, %, $(wildcard $(SRCDIR)/*.cpp))
 OBJPATH = $(patsubst %, $(OBJDIR)/%.o, $(PARSER) $(SRC))
 
 LIBFILE = $(DISTDIR)/libascript.a
-
-HEADERS = $(wildcard $(INCLUDEDIR)/*.h)
+TESTS = $(patsubst $(TESTDIR)/%.cpp, %, $(wildcard $(TESTDIR)/*.cpp))
 
 lib: $(LIBFILE)
 
@@ -32,31 +29,26 @@ install: $(LIBFILE)
 	install -d /usr/local/lib
 	install -m 644 $(LIBFILE) /usr/local/lib
 	install -d /usr/local/include/ascript
-	install -m 644 $(HEADERS) /usr/local/include/ascript
+	install -m 644 $(wildcard $(SRCDIR)/include/ascript/*.h) /usr/local/include/ascript
 
 $(LIBFILE): $(OBJPATH) | $(DISTDIR)
 	ar r $(LIBFILE) $(OBJPATH)
 
-cleancompile:
+clean:
 	rm -rf $(DISTDIR)
 	rm -rf $(OBJDIR)
 	rm -rf $(DEPSDIR)
-
-cleanparser:
 	rm -rf $(PARSERDIR)
+	rm -rf $(GRAMMARTESTDIR)
+	rm -rf $(TESTS)
 
-cleantest:
-	rm -rf $(TESTDIR)
-
-clean: cleancompile cleanparser cleantest
-
-.PHONY: clean cleancompile cleanparser cleantest
+.PHONY: clean
 
 $(PARSERH) $(PARSERSRC): $(GRAMMARFILES) | $(PARSERDIR)
 	antlr4 -Dlanguage=Cpp *.g4 -o $(PARSERDIR) -visitor
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp $(DEPSDIR)/%.d $(PARSERH) | $(DEPSDIR) $(OBJDIR)
-	g++ $(DEPFLAGS) -c -o $@ $< $(FLAGS)
+	g++ -MT $@ -MMD -MP -MF $(DEPSDIR)/$*.d -c -o $@ $< $(FLAGS)
 
 $(OBJDIR)/%.o: $(PARSERDIR)/%.cpp $(PARSERH) | $(DEPSDIR) $(OBJDIR)
 	g++ -c -o $@ $< $(FLAGS) -w
@@ -65,21 +57,28 @@ $(DEPSDIR): ; mkdir -p $@
 $(OBJDIR): ; mkdir -p $@
 $(PARSERDIR): ; mkdir -p $@
 $(DISTDIR): ; mkdir -p $@
-$(TESTDIR): ; mkdir -p $@
+$(GRAMMARTESTDIR): ; mkdir -p $@
 
 DEPSFILES := $(patsubst %,$(DEPSDIR)/%.d, $(SRC))
 $(DEPSFILES):
 include $(wildcard $(DEPSFILES))
 
-$(TESTDIR)/%Parser.java: %.g4 | $(TESTDIR)
-	antlr4 $< -o $(TESTDIR)
+$(GRAMMARTESTDIR)/%Parser.java: %.g4 | $(GRAMMARTESTDIR)
+	antlr4 $< -o $(GRAMMARTESTDIR)
 
-$(TESTDIR)/%Parser.class: $(TESTDIR)/%Parser.java
-	javac $(TESTDIR)/$**.java
+$(GRAMMARTESTDIR)/%Parser.class: $(GRAMMARTESTDIR)/%Parser.java
+	javac $(GRAMMARTESTDIR)/$**.java
 
-TESTCLASSES = $(patsubst %, $(TESTDIR)/%Parser.class, ${GRAMMARS})
+TESTCLASSES = $(patsubst %, $(GRAMMARTESTDIR)/%Parser.class, ${GRAMMARS})
 
-test: $(TESTCLASSES)
+grammartest: $(TESTCLASSES)
+
+test: $(TESTS)
+
+%: $(TESTDIR)/%.cpp | $(LIBFILE)
+	g++ -o $@ $^ $(FLAGS) -Ldist/ -lascript -Iinclude/ -lantlr4-runtime
+
+all: grammartest lib install test
 
 vars:; $(foreach v, $(filter-out $(VARS_OLD) VARS_OLD,$(.VARIABLES)), $(info $(v) = $($(v)))) @#noop
 
