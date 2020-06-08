@@ -149,6 +149,43 @@ void Script::exec(valp vars,statp sp) {
     else throw runtime_error("Unknown statement");
 }
 
+valp Script::evalFunc(valp vars0, valp ctx, string fn, expl argsl) {
+    // extract function or method
+    auto f0 = dynamic_pointer_cast<ValueMap>(ctx)->at(fn);
+    if (auto f = dynamic_pointer_cast<ValueFunction>(f0)) {
+        // In case of script function
+        // Extract arguments
+        vector<valp> args;
+        for (auto a : argsl) {
+            args.push_back(eval(vars0, a));
+        }
+        // place arguments in a map associated with argument names
+        ValueMap *env = new ValueMap();
+        if (f->args.size() != args.size()) throw runtime_error("Unmatching arguments");
+        for (int i=0;i<f->args.size();i++) {
+            (*env)[f->args[i]] = args[i];
+        }
+        // link `this`
+        (*env)["this"] = ctx;
+        // run function
+        exec(valp(env), f->body);
+        // extract return value
+        auto v = ret;
+        // as we come back to the underlying code reset return indicator
+        ret = nullptr;
+        return v;
+    } else if (auto f = dynamic_pointer_cast<ValueNativeFunc>(f0)) {
+        // in case of native function
+        // extract arguments
+        vector<valp> args;
+        for (auto a : argsl) {
+            args.push_back(eval(vars0, a));
+        }
+        // run function and get return value
+        return f->f(args);
+    } else throw runtime_error("Can't call non-function");
+}
+
 valp Script::eval(valp vars0, expp ep) {
     valp v;
 
@@ -191,45 +228,14 @@ valp Script::eval(valp vars0, expp ep) {
     else if (auto e = dynamic_pointer_cast<FuncCallExp>(ep)) {
         // Get context for `this`
         valp vctx = (e->ctx)?eval(vars0, e->ctx):vars0;
-        // Check if `this` is a map
-        ValueMap vvctx;
-        if (auto vctx1 = dynamic_pointer_cast<ValueMap>(vctx)) {
-            vvctx = *vctx1;
-        } else throw runtime_error("Can't call member function on non-map");
-
-        // extract function or method
-        auto f0 = vvctx.at(e->f);
-        if (auto f = dynamic_pointer_cast<ValueFunction>(f0)) {
-            // In case of script function
-            // Extract arguments
-            vector<valp> args;
-            for (auto a : e->a) {
-                args.push_back(eval(vars0, a));
-            }
-            // place arguments in a map associated with argument names
-            ValueMap *env = new ValueMap();
-            if (f->args.size() != args.size()) throw runtime_error("Unmatching arguments");
-            for (int i=0;i<f->args.size();i++) {
-                (*env)[f->args[i]] = args[i];
-            }
-            // link `this`
-            (*env)["this"] = vctx;
-            // run function
-            exec(valp(env), f->body);
-            // extract return value
-            v = ret;
-            // as we come back to the underlying code reset return indicator
-            ret = nullptr;
-        } else if (auto f = dynamic_pointer_cast<ValueNativeFunc>(f0)) {
-            // in case of native function
-            // extract arguments
-            vector<valp> args;
-            for (auto a : e->a) {
-                args.push_back(eval(vars0, a));
-            }
-            // run function and get return value
-            v = f->f(args);
-        } else throw runtime_error("Can't call non-function");
+        // If `this` is a map call function
+        if (dynamic_pointer_cast<ValueMap>(vctx)) {
+            v = evalFunc(vars0, vctx, e->f, e->a);
+        } else if (auto list = dynamic_pointer_cast<ValueList>(vctx)) {
+            if (e->f == "length" && e->a.size() == 0) {
+                v = valp(new ValueInt(list->size()));
+            } else throw runtime_error("Unknown method for list");
+        } else throw runtime_error("Can't call function on this type");
     }
     else if (auto e = dynamic_pointer_cast<StrExp>(ep)) {
         v = valp(new ValueStr(e->v));
@@ -303,6 +309,14 @@ valp& Script::getRef(valp vars0, expp lp, bool create) {
                 }
             }
             throw runtime_error("Invalid exp");
+        } else if (auto l1 = dynamic_pointer_cast<ValueList>(l0)) {
+            auto ei = eval(vars0, l->i);
+            if (auto e = dynamic_pointer_cast<ValueInt>(ei)) {
+                if (e->value >= l1->size()) {
+                    l1->resize(e->value+1);
+                }
+                return l1->at(e->value);
+            }
         }
         throw runtime_error("Can't access member");
     }

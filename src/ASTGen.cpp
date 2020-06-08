@@ -119,11 +119,13 @@ public:
     }
 
     virtual antlrcpp::Any visitFunccallexp(ASParser::FunccallexpContext *ctx) override {
-        return expp(new FuncCallExp(nullptr, ctx->ID()->getText(), visit(ctx->explist())));
+        expl args = (ctx->explist())?visit(ctx->explist()).as<expl>():expl();
+        return expp(new FuncCallExp(nullptr, ctx->ID()->getText(), args));
     }
 
     virtual antlrcpp::Any visitMembercallexp(ASParser::MembercallexpContext *ctx) override {
-        return expp(new FuncCallExp(visit(ctx->exp()), ctx->ID()->getText(), visit(ctx->explist())));
+        expl args = (ctx->explist())?visit(ctx->explist()).as<expl>():expl();
+        return expp(new FuncCallExp(visit(ctx->exp()), ctx->ID()->getText(), args));
     }
 
     virtual antlrcpp::Any visitUnaryexp(ASParser::UnaryexpContext *ctx) override {
