@@ -104,6 +104,16 @@ public:
         return expp(new MapDefExp(v));
     }
 
+    virtual antlrcpp::Any visitListdef(ASParser::ListdefContext *ctx) override {
+        expl e = {};
+        if (ctx->explist()) e = visit(ctx->explist()).as<expl>();
+        return expp(new ListDefExp(e));
+    }
+
+    virtual antlrcpp::Any visitIndexexp(ASParser::IndexexpContext *ctx) override {
+        return expp(new IndexExp(visit(ctx->exp(0)), visit(ctx->exp(1))));
+    }
+
     virtual antlrcpp::Any visitFunctiondef(ASParser::FunctiondefContext *ctx) override {
         return expp(new FuncDefExp(visit(ctx->idlist()), visit(ctx->stat())));
     }
@@ -145,7 +155,7 @@ public:
     }
     virtual antlrcpp::Any visitStringexp(ASParser::StringexpContext *ctx) override {
         auto str = ctx->STRING()->getText();
-        return expp(new StrExp(str.substr(1, str.length()-1)));
+        return expp(new StrExp(str.substr(1, str.length()-2)));
     }
     virtual antlrcpp::Any visitParenexp(ASParser::ParenexpContext *ctx) override {
         return visit(ctx->exp());

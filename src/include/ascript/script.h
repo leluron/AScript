@@ -69,11 +69,26 @@ struct ValueMap : public Value, public var {
     virtual valp binop(std::string op, valp r) { throw std::runtime_error("Unsupported");}
     virtual std::string print() {
         std::stringstream ss; 
-        ss << "{\n";
+        ss << "{";
         for (auto a : *this) {
-            ss << a.first << ":" << a.second->print() << "\n";
+            ss << a.first << ":" << a.second->print() << ";";
         }
         ss << "}";
+        return ss.str();
+    }
+};
+
+// Vector of values
+struct ValueList : public Value, public std::vector<valp> {
+    virtual valp unop(std::string op) { throw std::runtime_error("Unsupported");}
+    virtual valp binop(std::string op, valp r) { throw std::runtime_error("Unsupported");}
+    virtual std::string print() {
+        std::stringstream ss; 
+        ss << "[";
+        for (auto a : *this) {
+            ss << a->print() << ",";
+        }
+        ss << "]";
         return ss.str();
     }
 };
@@ -223,6 +238,12 @@ struct UnOpExp : public Exp {
 struct MapDefExp : public Exp {
     MapDefExp(std::map<std::string, expp> values) : values(values) {}
     std::map<std::string, expp> values;
+};
+
+// List constructor
+struct ListDefExp : public Exp {
+    ListDefExp(expl values) : values(values) {}
+    expl values;
 };
 
 // ctx.f(a...)

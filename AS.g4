@@ -21,12 +21,14 @@ exp
     | ID                                #idexp
     // object creation
     | '{' (ID '=' exp)* '}'            #mapdef
+    | '[' explist? ']'                 #listdef
     | 'function' '(' idlist? ')' stat #functiondef
     // functions
     | ID '(' explist? ')'     #funccallexp
     | exp '.' ID '(' explist? ')'     #membercallexp
     // access
     | exp '.' ID                        #memberexp
+    | exp '[' exp ']'                   #indexexp
     // unop
     | op=('-' | 'not') exp              #unaryexp
     // binop

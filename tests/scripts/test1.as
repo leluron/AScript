@@ -7,3 +7,9 @@ obj = {
 
 obj.init(f(8,3))
 c = obj.x
+
+
+
+list = [2, "random_test", obj]
+
+d = list[1]

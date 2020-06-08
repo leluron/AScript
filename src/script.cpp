@@ -181,6 +181,13 @@ valp Script::eval(valp vars0, expp ep) {
         }
         v = valp(m);
     }
+    else if (auto e = dynamic_pointer_cast<ListDefExp>(ep)) {
+        auto m = new ValueList({});
+        for (auto f : e->values) {
+            m->push_back(eval(vars0, f));
+        }
+        v = valp(m);
+    }
     else if (auto e = dynamic_pointer_cast<FuncCallExp>(ep)) {
         // Get context for `this`
         valp vctx = (e->ctx)?eval(vars0, e->ctx):vars0;
@@ -244,9 +251,15 @@ valp Script::eval(valp vars0, expp ep) {
             if (auto i = dynamic_pointer_cast<ValueStr>(iv)) {
                 v = l->at(i->value);
             }
-            else throw runtime_error("Unmatching types");
+            else throw runtime_error("Can't access map with non-string");
         }
-        else throw runtime_error("Unmatching types");
+        else if (auto l = dynamic_pointer_cast<ValueList>(lv)) {
+            if (auto i = dynamic_pointer_cast<ValueInt>(iv)) {
+                v = l->at(i->value);
+            }
+            else throw runtime_error("Can't access list with non-int");
+        }
+        else throw runtime_error("Can't access non-container");
     }
     else throw runtime_error("Unknown statement");
 
