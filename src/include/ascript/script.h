@@ -339,7 +339,7 @@ private:
     // Create variable if not found; if create flag set
     valp &getRef(valp vars, expp l, bool create);
 
-    valp evalFunc(valp vars, valp ctx, std::string f, expl args);
+    valp evalFunc(valp vars, valp ctx, std::string f, std::vector<valp> args);
 
     // Current return value; null means not returning
     valp ret = nullptr;

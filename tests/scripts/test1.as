@@ -24,3 +24,5 @@ list = [2, "random_test", obj]
 len = list.length()
 d = list[1]
 list2 = reverse(list)
+
+assert(len == 3)

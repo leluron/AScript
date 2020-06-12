@@ -30,6 +30,8 @@ template <typename T> T binop0(T l, T r, string op) {
     if (op == "*") return l*r;
     if (op == "/") return l/r;
     if (op == "%") return (int)l%(int)r;
+    if (op == "==") return l==r;
+    if (op == "!=") return l!=r;
     if (op == "<=") return l<=r;
     if (op == ">=") return l>=r;
     if (op == "<") return l<r;
@@ -149,16 +151,14 @@ void Script::exec(valp vars,statp sp) {
     else throw runtime_error("Unknown statement");
 }
 
-valp Script::evalFunc(valp vars0, valp ctx, string fn, expl argsl) {
+valp Script::evalFunc(valp vars0, valp ctx, string fn, vector<valp> args) {
     // extract function or method
-    auto f0 = dynamic_pointer_cast<ValueMap>(ctx)->at(fn);
+    auto f1 = dynamic_pointer_cast<ValueMap>(ctx);
+    auto it = f1->find(fn);
+    if (it == f1->end()) throw runtime_error("Can't find function");
+    auto f0 = it->second;
     if (auto f = dynamic_pointer_cast<ValueFunction>(f0)) {
         // In case of script function
-        // Extract arguments
-        vector<valp> args;
-        for (auto a : argsl) {
-            args.push_back(eval(vars0, a));
-        }
         // place arguments in a map associated with argument names
         ValueMap *env = new ValueMap();
         if (f->args.size() != args.size()) throw runtime_error("Unmatching arguments");
@@ -176,11 +176,6 @@ valp Script::evalFunc(valp vars0, valp ctx, string fn, expl argsl) {
         return v;
     } else if (auto f = dynamic_pointer_cast<ValueNativeFunc>(f0)) {
         // in case of native function
-        // extract arguments
-        vector<valp> args;
-        for (auto a : argsl) {
-            args.push_back(eval(vars0, a));
-        }
         // run function and get return value
         return f->f(args);
     } else throw runtime_error("Can't call non-function");
@@ -226,16 +221,33 @@ valp Script::eval(valp vars0, expp ep) {
         v = valp(m);
     }
     else if (auto e = dynamic_pointer_cast<FuncCallExp>(ep)) {
-        // Get context for `this`
-        valp vctx = (e->ctx)?eval(vars0, e->ctx):vars0;
-        // If `this` is a map call function
-        if (dynamic_pointer_cast<ValueMap>(vctx)) {
-            v = evalFunc(vars0, vctx, e->f, e->a);
-        } else if (auto list = dynamic_pointer_cast<ValueList>(vctx)) {
-            if (e->f == "length" && e->a.size() == 0) {
-                v = valp(new ValueInt(list->size()));
-            } else throw runtime_error("Unknown method for list");
-        } else throw runtime_error("Can't call function on this type");
+        // extract args
+        vector<valp> args;
+        for (auto a : e->a) {
+            args.push_back(eval(vars0, a));
+        }
+        // Global functions
+        bool wasGlobal = !e->ctx;
+        if (!e->ctx) {
+            if (e->f == "assert" && args.size() == 1) {
+                if (auto val = dynamic_pointer_cast<ValueInt>(args[0])) {
+                    if (val->value==0) throw runtime_error("Assertion failed");
+                } else throw runtime_error("Can't assert non-int");
+            }
+            else wasGlobal = false;
+        }
+        if (!wasGlobal) {
+            // Get context for `this`
+            valp vctx = (e->ctx)?eval(vars0, e->ctx):vars0;
+            // If `this` is a map call function
+            if (dynamic_pointer_cast<ValueMap>(vctx)) {
+                v = evalFunc(vars0, vctx, e->f, args);
+            } else if (auto list = dynamic_pointer_cast<ValueList>(vctx)) {
+                if (e->f == "length" && args.size() == 0) {
+                    v = valp(new ValueInt(list->size()));
+                } else throw runtime_error("Unknown method for list");
+            } else throw runtime_error("Can't call function on this type");
+        }
     }
     else if (auto e = dynamic_pointer_cast<StrExp>(ep)) {
         v = valp(new ValueStr(e->v));
