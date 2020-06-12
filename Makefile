@@ -76,7 +76,7 @@ grammartest: $(TESTCLASSES)
 test: $(TESTS)
 
 %: $(TESTDIR)/%.cpp $(LIBFILE)
-	g++ -o $@ $< $(FLAGS) -Ldist/ -lascript -Iinclude/ -lantlr4-runtime
+	g++ -o $@ $< $(FLAGS) -Ldist/ -lascript -Iinclude/ -lantlr4-runtime -lstdc++fs
 
 all: grammartest lib install test
 

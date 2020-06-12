@@ -5,6 +5,8 @@ obj = {
     }
 }
 
+f = function(x,y) return x*y
+
 obj.init(f(8,3))
 c = obj.x
 
