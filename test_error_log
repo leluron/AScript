@@ -1,0 +1,4 @@
+tests/error/basic.as:1:0:error: Assertion failed
+assert(false)
+^~~~~~~~~~~~~
+

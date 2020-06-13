@@ -149,12 +149,29 @@ struct ValueExtern : public Value {
     T& ref;
 };
 
+struct SourceInfo {
+    size_t line = -1;
+    size_t column;
+    size_t start_index;
+    size_t end_index;
+};
+
+class InterpreterError : public std::exception {
+public:
+    InterpreterError(std::string filename, std::string source, SourceInfo srcinfo, const std::string &str);
+    virtual const char* what() const noexcept;
+private:
+    std::string str;
+};
+
 struct Stat {
     virtual ~Stat() {}
+    SourceInfo srcinfo;
 };
 
 struct Exp {
     virtual ~Exp() {}
+    SourceInfo srcinfo;
 };
 
 // left = right
@@ -331,6 +348,7 @@ public:
     }
 
 private:
+    void load(std::string path);
     // Executes statement s with context vars
     void exec(valp vars, statp s);
     // Evaluates expresison e with context vars
@@ -347,5 +365,7 @@ private:
     valp variables = valp(new ValueMap());
     // AST to execute
     statp code;
+    std::string source;
+    std::string filename;
 
 };

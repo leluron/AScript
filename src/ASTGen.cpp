@@ -5,27 +5,46 @@
 
 #include <ascript/script.h>
 
-#define BINOP return expp(new BinOpExp(ctx->op->getText(), visit(ctx->exp(0)), visit(ctx->exp(1))))
-#define UNOP return expp(new UnOpExp(ctx->op->getText(), visit(ctx->exp())))
+#define BINOP return exp(new BinOpExp(ctx->op->getText(), visit(ctx->exp(0)), visit(ctx->exp(1))), ctx)
+#define UNOP return exp(new UnOpExp(ctx->op->getText(), visit(ctx->exp())), ctx)
 
 using namespace std;
 
 // Generate AST from antlr4 contexts
 class ASTGen : ASBaseVisitor {
 public:
+    SourceInfo get(antlr4::ParserRuleContext *ctx) {
+        return {
+            ctx->getStart()->getLine(),
+            ctx->getStart()->getCharPositionInLine(),
+            ctx->getStart()->getStartIndex(),
+            ctx->getStop()->getStopIndex()
+        };
+    }
+
+    expp exp(Exp *e, antlr4::ParserRuleContext *ctx) {
+        e->srcinfo = get(ctx);
+        return expp(e);
+    }
+
+    statp stat(Stat *s, antlr4::ParserRuleContext *ctx) {
+        s->srcinfo = get(ctx);
+        return statp(s);
+    }
+
     virtual antlrcpp::Any visitFile(ASParser::FileContext *ctx) override {
         vector<statp> s;
         for (auto c : ctx->stat()) {
             s.push_back(visit(c));
         }
-        return statp(new BlockStat(s));
+        return stat(new BlockStat(s), ctx);
     }
 
     virtual antlrcpp::Any visitAssignstat(ASParser::AssignstatContext *ctx) override {
-        return statp(new AssignStat(
+        return stat(new AssignStat(
             visit(ctx->exp(0)).as<expp>(),
             visit(ctx->exp(1)).as<expp>()
-        ));
+        ), ctx);
     }
 
     // Return stat, or empty block if ctx is null
@@ -40,9 +59,9 @@ public:
         statp s = visit(ctx->stat(index));
         if (index == ctx->exp().size()) {
             statp els = stat_option(ctx->els);
-            return statp(new IfStat(e,s,els));
+            return stat(new IfStat(e,s,els), ctx);
         } else {
-            return statp(new IfStat(e,s,visitIfAux(ctx, index+1)));
+            return stat(new IfStat(e,s,visitIfAux(ctx, index+1)), ctx);
         }
     }
 
@@ -55,24 +74,24 @@ public:
         for (auto c : ctx->stat()) {
             s.push_back(visit(c));
         }
-        return statp(new BlockStat(s));
+        return stat(new BlockStat(s), ctx);
     }
 
     virtual antlrcpp::Any visitWhilestat(ASParser::WhilestatContext *ctx) override {
-        return statp(new WhileStat(
+        return stat(new WhileStat(
             visit(ctx->exp()).as<expp>(),
-            statp(visit(ctx->stat()).as<statp>())
-        ));
+            visit(ctx->stat()).as<statp>()
+        ), ctx);
     }
 
     virtual antlrcpp::Any visitReturnstat(ASParser::ReturnstatContext *ctx) override {
         expp ret = nullptr;
         if (ctx->exp()) ret = visit(ctx->exp());
-        return statp(new ReturnStat(ret));
+        return stat(new ReturnStat(ret), ctx);
     }
 
     virtual antlrcpp::Any visitIdexp(ASParser::IdexpContext *ctx) override {
-        return expp(new IdExp(ctx->ID()->getText()));
+        return exp(new IdExp(ctx->ID()->getText()), ctx);
     }
 
     virtual antlrcpp::Any visitIntexp(ASParser::IntexpContext *ctx) override {
@@ -80,20 +99,20 @@ public:
         ss << ctx->INT()->getText();
         int v;
         ss >> v;
-        return expp(new IntExp(v));
+        return exp(new IntExp(v), ctx);
     }
     virtual antlrcpp::Any visitFloatexp(ASParser::FloatexpContext *ctx) override {
         stringstream ss;
         ss << ctx->FLOAT()->getText();
         float v;
         ss >> v;
-        return expp(new FloatExp(v));
+        return exp(new FloatExp(v), ctx);
     }
     virtual antlrcpp::Any visitFunccallstat(ASParser::FunccallstatContext *ctx) override {
-        return statp(new FuncCallStat(nullptr, ctx->ID()->getText(), visit(ctx->explist())));
+        return stat(new FuncCallStat(nullptr, ctx->ID()->getText(), visit(ctx->explist())), ctx);
     }
     virtual antlrcpp::Any visitMembercallstat(ASParser::MembercallstatContext *ctx) override {
-        return statp(new FuncCallStat(visit(ctx->exp()), ctx->ID()->getText(), visit(ctx->explist())));
+        return stat(new FuncCallStat(visit(ctx->exp()), ctx->ID()->getText(), visit(ctx->explist())), ctx);
     }
 
     virtual antlrcpp::Any visitMapdef(ASParser::MapdefContext *ctx) override {
@@ -101,31 +120,31 @@ public:
         for (int i=0;i<ctx->ID().size();i++) {
             v[ctx->ID(i)->getText()] = visit(ctx->exp(i));
         }
-        return expp(new MapDefExp(v));
+        return exp(new MapDefExp(v), ctx);
     }
 
     virtual antlrcpp::Any visitListdef(ASParser::ListdefContext *ctx) override {
         expl e = {};
         if (ctx->explist()) e = visit(ctx->explist()).as<expl>();
-        return expp(new ListDefExp(e));
+        return exp(new ListDefExp(e), ctx);
     }
 
     virtual antlrcpp::Any visitIndexexp(ASParser::IndexexpContext *ctx) override {
-        return expp(new IndexExp(visit(ctx->exp(0)), visit(ctx->exp(1))));
+        return exp(new IndexExp(visit(ctx->exp(0)), visit(ctx->exp(1))), ctx);
     }
 
     virtual antlrcpp::Any visitFunctiondef(ASParser::FunctiondefContext *ctx) override {
-        return expp(new FuncDefExp(visit(ctx->idlist()), visit(ctx->stat())));
+        return exp(new FuncDefExp(visit(ctx->idlist()), visit(ctx->stat())), ctx);
     }
 
     virtual antlrcpp::Any visitFunccallexp(ASParser::FunccallexpContext *ctx) override {
         expl args = (ctx->explist())?visit(ctx->explist()).as<expl>():expl();
-        return expp(new FuncCallExp(nullptr, ctx->ID()->getText(), args));
+        return exp(new FuncCallExp(nullptr, ctx->ID()->getText(), args), ctx);
     }
 
     virtual antlrcpp::Any visitMembercallexp(ASParser::MembercallexpContext *ctx) override {
         expl args = (ctx->explist())?visit(ctx->explist()).as<expl>():expl();
-        return expp(new FuncCallExp(visit(ctx->exp()), ctx->ID()->getText(), args));
+        return exp(new FuncCallExp(visit(ctx->exp()), ctx->ID()->getText(), args), ctx);
     }
 
     virtual antlrcpp::Any visitUnaryexp(ASParser::UnaryexpContext *ctx) override {
@@ -150,20 +169,20 @@ public:
         BINOP;
     }
     virtual antlrcpp::Any visitTrueexp(ASParser::TrueexpContext *ctx) override {
-        return expp(new IntExp(1));
+        return exp(new IntExp(1), ctx);
     }
     virtual antlrcpp::Any visitFalseexp(ASParser::FalseexpContext *ctx) override {
-        return expp(new IntExp(0));
+        return exp(new IntExp(0), ctx);
     }
     virtual antlrcpp::Any visitStringexp(ASParser::StringexpContext *ctx) override {
         auto str = ctx->STRING()->getText();
-        return expp(new StrExp(str.substr(1, str.length()-2)));
+        return exp(new StrExp(str.substr(1, str.length()-2)), ctx);
     }
     virtual antlrcpp::Any visitParenexp(ASParser::ParenexpContext *ctx) override {
         return visit(ctx->exp());
     }
     virtual antlrcpp::Any visitMemberexp(ASParser::MemberexpContext *ctx) override {
-        return expp(new IndexExp(visit(ctx->exp()), expp(new StrExp(ctx->ID()->getText()))));
+        return exp(new IndexExp(visit(ctx->exp()), expp(new StrExp(ctx->ID()->getText()))), ctx);
     }
     virtual antlrcpp::Any visitExplist(ASParser::ExplistContext *ctx) override {
         expl l;
@@ -181,7 +200,7 @@ public:
     }
 
     virtual antlrcpp::Any visitTernaryexp(ASParser::TernaryexpContext *ctx) override {
-        return expp(new TernaryExp(visit(ctx->exp(0)), visit(ctx->exp(1)), visit(ctx->exp(2))));
+        return exp(new TernaryExp(visit(ctx->exp(0)), visit(ctx->exp(1)), visit(ctx->exp(2))), ctx);
     }
 
 };

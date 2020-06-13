@@ -21,8 +21,24 @@ int main(void) {
             passed_tests += 1;
             cout << "\033[30;42m" << p << "\033[0m" << endl;
         } catch (exception &e) {
-            log << p << ":" << e.what() << endl;
+            log << e.what() << endl;
             cout << "\033[30;41m" << p << "\033[0m" << endl;
+        }
+    }
+
+    ofstream error_log("test_error_log");
+
+    for (auto& de : experimental::filesystem::directory_iterator("tests/error")) {
+        auto p = de.path();
+        num_tests += 1;
+        Script script(p);
+        try {
+            script.run();
+            cout << "\033[30;41m" << p << "\033[0m" << endl;
+        } catch (exception &e) {
+            error_log << e.what() << endl;
+            passed_tests += 1;
+            cout << "\033[30;42m" << p << "\033[0m" << endl;
         }
     }
 
@@ -42,10 +58,12 @@ int main(void) {
         passed_tests += 1;
         cout << "\033[30;42m" << p << "\033[0m" << endl;
     } catch (exception &e) {
-        log << p << ":" << e.what() << endl;
+        log << e.what() << endl;
         cout << "\033[30;41m" << p << "\033[0m" << endl;
     }
     num_tests += 1;
 
     cout << passed_tests << "/" << num_tests << " tests passed" << endl;
+
+    return passed_tests < num_tests;
 }
