@@ -47,6 +47,14 @@ public:
         ), ctx);
     }
 
+    virtual antlrcpp::Any visitCompassignstat(ASParser::CompassignstatContext *ctx) override {
+        return stat(new CompAssignStat(
+            visit(ctx->exp(0)),
+            visit(ctx->exp(1)),
+            ctx->op->getText()
+        ), ctx);
+    }
+
     // Return stat, or empty block if ctx is null
     statp stat_option(ASParser::StatContext *s) {
         if (!s) return statp(new BlockStat({}));

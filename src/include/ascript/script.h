@@ -181,6 +181,12 @@ struct AssignStat : public Stat {
     expp right;
 };
 
+struct CompAssignStat : public Stat {
+    CompAssignStat(expp l, expp r, std::string op) : left(l), right(r), op(op) {}
+    expp left, right;
+    std::string op;
+};
+
 // if cond then else els
 struct IfStat : public Stat {
     IfStat(expp cond, statp then, statp els) : cond(cond), then(then), els(els) {}

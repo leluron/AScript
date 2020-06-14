@@ -3,6 +3,7 @@ grammar AS;
 file: stat* EOF;
 
 stat: exp '=' exp #assignstat
+    | exp op=('+='|'-='|'*='|'/=') exp #compassignstat
     | exp '.' ID '(' explist ')' #membercallstat
     | ID '(' explist ')' #funccallstat
     | 'if' exp stat ('else if' exp stat)* ('else' els=stat)? #condstat

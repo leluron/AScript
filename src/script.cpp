@@ -117,6 +117,14 @@ void Script::exec(valp vars,statp sp) {
                 v = r;
             }
         }
+        else if (auto s = dynamic_pointer_cast<CompAssignStat>(sp)) {
+            // eval right side
+            auto r = eval(vars, s->right);
+            // get reference to left side
+            auto& v = getRef(vars, s->left, false);
+            string op(1, s->op[0]);
+            v = v->binop(op, r);
+        }
         else if (auto s = dynamic_pointer_cast<FuncCallStat>(sp)) {
             expp fce = expp(new FuncCallExp(s->ctx, s->f, s->a));
             fce->srcinfo = sp->srcinfo;
