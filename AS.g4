@@ -8,6 +8,7 @@ stat: exp '=' exp #assignstat
     | 'if' exp stat ('else if' exp stat)* ('else' els=stat)? #condstat
     | '{' stat* '}' #blockstat
     | 'while' exp stat #whilestat
+    | 'for' ID 'in' exp stat #forstat
     | 'return' exp? #returnstat
     ;
 

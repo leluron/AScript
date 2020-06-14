@@ -201,6 +201,13 @@ struct WhileStat : public Stat {
     statp stat;
 };
 
+struct ForStat : public Stat {
+    ForStat(std::string id, expp list, statp stat) : id(id), list(list), stat(stat) {}
+    std::string id;
+    expp list;
+    statp stat;
+};
+
 // ctx.f(a...)
 // or
 // f(a...)

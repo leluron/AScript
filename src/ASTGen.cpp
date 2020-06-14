@@ -84,6 +84,14 @@ public:
         ), ctx);
     }
 
+    virtual antlrcpp::Any visitForstat(ASParser::ForstatContext *ctx) override {
+        return stat(new ForStat(
+            ctx->ID()->getText(),
+            visit(ctx->exp()),
+            visit(ctx->stat())
+        ), ctx);
+    }
+
     virtual antlrcpp::Any visitReturnstat(ASParser::ReturnstatContext *ctx) override {
         expp ret = nullptr;
         if (ctx->exp()) ret = visit(ctx->exp());

@@ -149,6 +149,17 @@ void Script::exec(valp vars,statp sp) {
                 } else throw runtime_error("Can't evaluate condition with non-int");
             }
         }
+        else if (auto s = dynamic_pointer_cast<ForStat>(sp)) {
+            auto list = eval(vars, s->list);
+            if (auto vlist = dynamic_pointer_cast<ValueList>(list)) {
+                for (auto vi : *vlist) {
+                    (*dynamic_pointer_cast<ValueMap>(vars))[s->id] = vi;
+                    exec(vars, s->stat);
+                    // stop loop if return stat executed
+                    if (ret) return;
+                }
+            } else throw runtime_error("Can't iterate through non-list");
+        }
         else if (auto s = dynamic_pointer_cast<ReturnStat>(sp)) {
             if (s->e) {
                 ret = eval(vars, s->e);
