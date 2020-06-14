@@ -276,6 +276,12 @@ struct ListDefExp : public Exp {
     expl values;
 };
 
+// Range constructor
+struct RangeDefExp : public Exp {
+    RangeDefExp(expp beg, expp end, expp step) : beg(beg), end(end), step(step) {}
+    expp beg, end, step;
+};
+
 // ctx.f(a...)
 // or
 // f(a...)

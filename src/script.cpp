@@ -250,6 +250,17 @@ valp Script::eval(valp vars0, expp ep) {
                 m->push_back(eval(vars0, f));
             }
             v = valp(m);
+        } 
+        else if (auto e = dynamic_pointer_cast<RangeDefExp>(ep)) {
+            auto beg  = dynamic_pointer_cast<ValueInt>(eval(vars0, e->beg));
+            auto end  = dynamic_pointer_cast<ValueInt>(eval(vars0, e->end));
+            auto step = dynamic_pointer_cast<ValueInt>(eval(vars0, e->step));
+            if (!beg || !end || !step) throw runtime_error("Ranges must contain ints");
+            auto m = new ValueList({});
+            for (auto i=beg->value;i<=end->value;i+=step->value) {
+                m->push_back(valp(new ValueInt(i)));
+            }
+            v = valp(m);
         }
         else if (auto e = dynamic_pointer_cast<FuncCallExp>(ep)) {
             // extract args

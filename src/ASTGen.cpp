@@ -145,6 +145,13 @@ public:
         return exp(new ListDefExp(e), ctx);
     }
 
+    virtual antlrcpp::Any visitRangedef(ASParser::RangedefContext *ctx) override {
+        expp step;
+        if (ctx->exp().size() == 2) step = expp(new IntExp(1));
+        else step = visit(ctx->exp(2));
+        return exp(new RangeDefExp(visit(ctx->exp(0)), visit(ctx->exp(1)), step), ctx);
+    }
+
     virtual antlrcpp::Any visitIndexexp(ASParser::IndexexpContext *ctx) override {
         return exp(new IndexExp(visit(ctx->exp(0)), visit(ctx->exp(1))), ctx);
     }

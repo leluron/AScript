@@ -23,6 +23,7 @@ exp
     | ID                                #idexp
     // object creation
     | '{' (ID '=' exp)* '}'            #mapdef
+    | '[' exp '..' exp ('..' exp)? ']' #rangedef
     | '[' explist? ']'                 #listdef
     | 'function' '(' idlist? ')' stat #functiondef
     // functions
@@ -59,7 +60,6 @@ INT
 
 FLOAT
     : [0-9]+ '.' [0-9]* 
-    | '.' [0-9]+ 
     ;
 
 STRING
