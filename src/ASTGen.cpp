@@ -57,7 +57,7 @@ public:
     statp visitIfAux(ASParser::CondstatContext *ctx, int index) {
         expp e = visit(ctx->exp(index));
         statp s = visit(ctx->stat(index));
-        if (index == ctx->exp().size()) {
+        if (index == ctx->exp().size()-1) {
             statp els = stat_option(ctx->els);
             return stat(new IfStat(e,s,els), ctx);
         } else {
@@ -134,7 +134,9 @@ public:
     }
 
     virtual antlrcpp::Any visitFunctiondef(ASParser::FunctiondefContext *ctx) override {
-        return exp(new FuncDefExp(visit(ctx->idlist()), visit(ctx->stat())), ctx);
+        vector<string> idlist;
+        if (ctx->idlist()) idlist = visit(ctx->idlist()).as<vector<string>>();
+        return exp(new FuncDefExp(idlist, visit(ctx->stat())), ctx);
     }
 
     virtual antlrcpp::Any visitFunccallexp(ASParser::FunccallexpContext *ctx) override {
@@ -200,7 +202,7 @@ public:
     }
 
     virtual antlrcpp::Any visitTernaryexp(ASParser::TernaryexpContext *ctx) override {
-        return exp(new TernaryExp(visit(ctx->exp(0)), visit(ctx->exp(1)), visit(ctx->exp(2))), ctx);
+        return exp(new TernaryExp(visit(ctx->exp(1)), visit(ctx->exp(0)), visit(ctx->exp(2))), ctx);
     }
 
 };

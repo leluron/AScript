@@ -265,8 +265,8 @@ valp Script::eval(valp vars0, expp ep) {
             v = valp(new ValueStr(e->v));
         }
         else if (auto e = dynamic_pointer_cast<TernaryExp>(ep)) {
-            auto v = eval(vars0, e->cond);
-            if (auto vi = dynamic_pointer_cast<ValueInt>(v)) {
+            auto vcond = eval(vars0, e->cond);
+            if (auto vi = dynamic_pointer_cast<ValueInt>(vcond)) {
                 if (vi->value) v = eval(vars0, e->then);
                 else v = eval(vars0, e->els);
             } else throw runtime_error("Can't evaluate condition with non-int");
