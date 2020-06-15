@@ -30,6 +30,15 @@ struct Value {
     virtual valp unop(std::string op) { throw std::runtime_error("Unsupported");}
     // Binary operator
     virtual valp binop(std::string op, valp r) { throw std::runtime_error("Unsupported");}
+    virtual size_t length() { throw std::runtime_error("Not iterable");}
+    virtual valp at(int id) { throw std::runtime_error("Not iterable");}
+    virtual valp& atRef(int id) { throw std::runtime_error("Not iterable");}
+    virtual valp get(std::string mem) { throw std::runtime_error("Can't get member from non-map");}
+    virtual valp& getRef(std::string mem) { throw std::runtime_error("Can't get member from non-map");}
+    virtual bool isTrue() { throw std::runtime_error("Can't evaluate to boolean");}
+    virtual int getInt() { throw std::runtime_error("Not an int");}
+    virtual valp call(std::string f, std::vector<valp> args) { throw std::runtime_error("Can't call function from this value");}
+    virtual std::string getStr() { throw std::runtime_error("Not a string");}
     virtual std::string print() = 0;
 };
 
@@ -43,6 +52,8 @@ struct ValueInt : public Value {
     ValueInt(int v) : value(v) {}
     virtual valp unop(std::string op);
     virtual valp binop(std::string op, valp r);
+    virtual int getInt() { return value; }
+    virtual bool isTrue() { return value!=0; }
     virtual std::string print() {
         std::stringstream ss;
         ss << value;
@@ -64,33 +75,75 @@ struct ValueFloat : public Value {
 };
 
 // Names associated to values
-struct ValueMap : public Value, public var {
+struct ValueMap : public Value {
+    ValueMap(var vars) : vars(vars) {}
     virtual valp unop(std::string op) { throw std::runtime_error("Unsupported");}
     virtual valp binop(std::string op, valp r) { throw std::runtime_error("Unsupported");}
+    virtual valp get(std::string mem) { 
+        return vars[mem];
+    }
+    virtual valp &getRef(std::string mem) { 
+        auto it = vars.find(mem);
+        if (it == vars.end()) vars[mem] = valp(new ValueNone());
+        return vars[mem];
+    }
     virtual std::string print() {
         std::stringstream ss; 
         ss << "{";
-        for (auto a : *this) {
+        for (auto a : vars) {
             ss << a.first << ":" << a.second->print() << ";";
         }
         ss << "}";
         return ss.str();
     }
+    var vars;
 };
 
 // Vector of values
-struct ValueList : public Value, public std::vector<valp> {
+struct ValueList : public Value {
+    ValueList(std::vector<valp> values) : values(values) {}
     virtual valp unop(std::string op) { throw std::runtime_error("Unsupported");}
     virtual valp binop(std::string op, valp r) { throw std::runtime_error("Unsupported");}
+    virtual size_t length() { return values.size(); }
+    virtual valp at(int i) { return values.at(i); }
+    virtual valp& atRef(int i) {
+        if (i >= length()) values.resize(i+1);
+        return values.at(i);
+    }
+    virtual valp call(std::string f, std::vector<valp> args) {
+        if (f == "length" && args.size() == 0) return valp(new ValueInt(length()));
+        throw std::runtime_error("Unknown method");
+    }
     virtual std::string print() {
         std::stringstream ss; 
         ss << "[";
-        for (auto a : *this) {
+        for (auto a : values) {
             ss << a->print() << ",";
         }
         ss << "]";
         return ss.str();
     }
+    std::vector<valp> values;
+};
+
+struct ValueRange : public Value {
+    ValueRange(int beg, int end, int step) : beg(beg), end(end) {
+        if (step == 0) throw std::runtime_error("Can't have a step of 0");
+        this->step = step;
+    }
+    virtual valp unop(std::string op) { throw std::runtime_error("Unsupported");}
+    virtual valp binop(std::string op, valp r) { throw std::runtime_error("Unsupported");}
+    virtual size_t length() { return ((end-beg)/step)+1; }
+    virtual valp at(int i) { return valp(new ValueInt(beg + step*i));}
+    virtual valp& atRef(int id) { throw std::runtime_error("Can't access range as left-value");}
+    virtual std::string print() {
+        std::stringstream ss; 
+        ss << "[" << beg << ".." << end;
+        if (step != 1) ss << ".." << step;
+        ss << "]";
+        return ss.str();
+    }
+    int beg, end, step;
 };
 
 // String
@@ -98,6 +151,7 @@ struct ValueStr : public Value {
     ValueStr(std::string v) : value(v) {}
     virtual valp unop(std::string op) { throw std::runtime_error("Unsupported");}
     virtual valp binop(std::string op, valp r);
+    virtual std::string getStr() { return value; }
     virtual std::string print() {
         std::stringstream ss;
         ss << "\"" << value << "\"";
@@ -306,11 +360,16 @@ struct StrExp : public Exp {
 };
 
 // l[i]
-// or
-// l.i
 struct IndexExp : public Exp {
     IndexExp(expp l, expp i) : l(l), i(i) {}
     expp l,i;
+};
+
+// l.member
+struct MemberExp : public Exp {
+    MemberExp(expp l, std::string member) : l(l), member(member) {}
+    expp l;
+    std::string member;
 };
 
 // then if cond else els
@@ -349,19 +408,17 @@ public:
     void run();
     // Returns whether script has finished
     bool isOver();
-    // reference to script variables
-    ValueMap& getVars() { return *std::dynamic_pointer_cast<ValueMap>(variables); }
 
     // Links reference to script variable
     template <typename T>
     void link(std::string name, T& ref) {
-        getVars()[name] = valp(new ValueExtern<T>(ref));
+        variables->getRef(name) = valp(new ValueExtern<T>(ref));
     }
     // Links native function to script variable
     template <typename T>
     void linkFunction(std::string name, std::function<T> f) {
         // Create wrapper function that takes list of values and returns value
-        getVars()[name] = valp(new ValueNativeFunc([&](auto a) {
+        variables->getRef(name) = valp(new ValueNativeFunc([&](auto a) {
             return call(f, a);
         }));
     }
@@ -372,19 +429,18 @@ private:
     void exec(valp vars, statp s);
     // Evaluates expresison e with context vars
     valp eval(valp vars, expp e);
-    // Get lvalue of l with context vars
-    // Create variable if not found; if create flag set
-    valp &getRef(valp vars, expp l, bool create);
+    valp eval1(valp vars, expp e);
 
-    valp evalFunc(valp vars, valp ctx, std::string f, std::vector<valp> args);
+    valp& evalRef(valp vars, expp lp);
+
+    valp evalFunc(valp ctx, std::string f, std::vector<valp> args);
 
     // Current return value; null means not returning
     valp ret = nullptr;
     // Script variables
-    valp variables = valp(new ValueMap());
+    valp variables = valp(new ValueMap({}));
     // AST to execute
     statp code;
     std::string source;
     std::string filename;
-
 };

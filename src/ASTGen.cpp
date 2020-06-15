@@ -207,7 +207,7 @@ public:
         return visit(ctx->exp());
     }
     virtual antlrcpp::Any visitMemberexp(ASParser::MemberexpContext *ctx) override {
-        return exp(new IndexExp(visit(ctx->exp()), expp(new StrExp(ctx->ID()->getText()))), ctx);
+        return exp(new MemberExp(visit(ctx->exp()), ctx->ID()->getText()), ctx);
     }
     virtual antlrcpp::Any visitExplist(ASParser::ExplistContext *ctx) override {
         expl l;

@@ -85,6 +85,10 @@ void Script::load(string path) {
 }
 
 Script::Script(string path) {
+    variables->getRef("assert") = valp(new ValueNativeFunc([](auto a) {
+        if (!a[0]->isTrue()) throw runtime_error("Assertion failed");
+        return valp(new ValueNone());
+    }));
     load(path);
 }
 
@@ -94,7 +98,7 @@ void Script::exec(valp vars,statp sp) {
             // eval right side
             auto r = eval(vars, s->right);
             // get reference to left side
-            auto& v = getRef(vars, s->left, true);
+            auto& v = evalRef(vars, s->left);
             // Specialization for extern values
             if (auto vv = dynamic_pointer_cast<ValueExtern<int>>(v)) {
                 if (auto rv = dynamic_pointer_cast<ValueInt>(r))
@@ -121,7 +125,7 @@ void Script::exec(valp vars,statp sp) {
             // eval right side
             auto r = eval(vars, s->right);
             // get reference to left side
-            auto& v = getRef(vars, s->left, false);
+            auto& v = evalRef(vars, s->left);
             string op(1, s->op[0]);
             v = v->binop(op, r);
         }
@@ -131,11 +135,9 @@ void Script::exec(valp vars,statp sp) {
             eval(vars, fce);
         }
         else if (auto s = dynamic_pointer_cast<IfStat>(sp)) {
-            auto v = eval(vars, s->cond);
-            if (auto vi = dynamic_pointer_cast<ValueInt>(v)) {
-                if (vi->value) exec(vars, s->then);
-                else exec(vars, s->els);
-            } else throw runtime_error("Can't evaluate condition with non-int");
+            auto vi = eval(vars, s->cond);
+            if (vi->isTrue()) exec(vars, s->then);
+            else exec(vars, s->els);
         }
         else if (auto s = dynamic_pointer_cast<BlockStat>(sp)) {
             for (auto ss : s->stats) {
@@ -146,27 +148,23 @@ void Script::exec(valp vars,statp sp) {
         }
         else if (auto s = dynamic_pointer_cast<WhileStat>(sp)) {
             while (true) {
-                auto v = eval(vars, s->cond);
-                if (auto vi = dynamic_pointer_cast<ValueInt>(v)) {
-                    if (vi->value) {
-                        exec(vars, s->stat);
-                        // stop loop if return stat executed
-                        if (ret) return;
-                    }
-                    else break;
-                } else throw runtime_error("Can't evaluate condition with non-int");
-            }
-        }
-        else if (auto s = dynamic_pointer_cast<ForStat>(sp)) {
-            auto list = eval(vars, s->list);
-            if (auto vlist = dynamic_pointer_cast<ValueList>(list)) {
-                for (auto vi : *vlist) {
-                    (*dynamic_pointer_cast<ValueMap>(vars))[s->id] = vi;
+                auto vi = eval(vars, s->cond);
+                if (vi->isTrue()) {
                     exec(vars, s->stat);
                     // stop loop if return stat executed
                     if (ret) return;
                 }
-            } else throw runtime_error("Can't iterate through non-list");
+                else break;
+            }
+        }
+        else if (auto s = dynamic_pointer_cast<ForStat>(sp)) {
+            auto list = eval(vars, s->list);
+            for (int i=0;i<list->length();i++) {
+                vars->getRef(s->id) = list->at(i);
+                exec(vars, s->stat);
+                // stop loop if return stat executed
+                if (ret) return;
+            }
         }
         else if (auto s = dynamic_pointer_cast<ReturnStat>(sp)) {
             if (s->e) {
@@ -181,24 +179,24 @@ void Script::exec(valp vars,statp sp) {
     }
 }
 
-valp Script::evalFunc(valp vars0, valp ctx, string fn, vector<valp> args) {
+valp Script::evalFunc(valp ctx, string fn, vector<valp> args) {
     // extract function or method
-    auto f1 = dynamic_pointer_cast<ValueMap>(ctx);
-    auto it = f1->find(fn);
-    if (it == f1->end()) throw runtime_error("Can't find function");
-    auto f0 = it->second;
+    auto f0 = ctx->getRef(fn);
     if (auto f = dynamic_pointer_cast<ValueFunction>(f0)) {
         // In case of script function
-        // place arguments in a map associated with argument names
-        ValueMap *env = new ValueMap();
+        // Check argument number
         if (f->args.size() != args.size()) throw runtime_error("Unmatching arguments");
+        // place arguments in a map associated with argument names
+        valp env = valp(new ValueMap({}));
         for (int i=0;i<f->args.size();i++) {
-            (*env)[f->args[i]] = args[i];
+            auto argName = f->args[i];
+            if (argName == "this") throw runtime_error("Argument can't be named `this`");
+            env->getRef(argName) = args[i];
         }
         // link `this`
-        (*env)["this"] = ctx;
+        env->getRef("this") = ctx;
         // run function
-        exec(valp(env), f->body);
+        exec(env, f->body);
         // extract return value
         auto v = ret;
         // as we come back to the underlying code reset return indicator
@@ -211,118 +209,92 @@ valp Script::evalFunc(valp vars0, valp ctx, string fn, vector<valp> args) {
     } else throw runtime_error("Can't call non-function");
 }
 
-valp Script::eval(valp vars0, expp ep) {
+valp Script::eval1(valp vars, expp ep) {
+     if (auto e = dynamic_pointer_cast<IntExp>(ep)) {
+        return valp(new ValueInt(e->value));
+    }
+    else if (auto e = dynamic_pointer_cast<FloatExp>(ep)) {
+        return valp(new ValueFloat(e->value));
+    }
+    else if (auto e = dynamic_pointer_cast<IdExp>(ep)) {
+        return vars->getRef(e->name);
+    }
+    else if (auto e = dynamic_pointer_cast<BinOpExp>(ep)) {
+        auto v1 = eval(vars, e->l);
+        auto v2 = eval(vars, e->r);
+        return v1->binop(e->op, v2);
+    }
+    else if (auto e = dynamic_pointer_cast<UnOpExp>(ep)) {
+        auto v1 = eval(vars, e->l);
+        return v1->unop(e->op);
+    }
+    else if (auto e = dynamic_pointer_cast<MapDefExp>(ep)) {
+        auto m = new ValueMap({});
+        for (auto f : e->values) {
+            m->vars.insert(make_pair(f.first, eval(vars, f.second)));
+        }
+        return valp(m);
+    }
+    else if (auto e = dynamic_pointer_cast<ListDefExp>(ep)) {
+        auto m = new ValueList({});
+        for (auto f : e->values) {
+            m->values.push_back(eval(vars, f));
+        }
+        return valp(m);
+    } 
+    else if (auto e = dynamic_pointer_cast<RangeDefExp>(ep)) {
+        auto beg  = eval(vars, e->beg);
+        auto end  = eval(vars, e->end);
+        auto step = eval(vars, e->step);
+        return valp(new ValueRange(beg->getInt(), end->getInt(), step->getInt()));
+    }
+    else if (auto e = dynamic_pointer_cast<FuncCallExp>(ep)) {
+        // extract args
+        vector<valp> args;
+        for (auto a : e->a) {
+            args.push_back(eval(vars, a));
+        }
+        // if no context call function globally
+        if (!e->ctx) {
+            if (dynamic_pointer_cast<ValueFunction>(vars->getRef(e->f))) return evalFunc(vars, e->f, args);
+            else return evalFunc(variables, e->f, args);
+        }
+        // Get context
+        valp vctx = eval(vars, e->ctx);
+        // If context is a map call function
+        if (dynamic_pointer_cast<ValueMap>(vctx)) {
+            return evalFunc(vctx, e->f, args);
+        // If not a map find method
+        } else {
+            return vctx->call(e->f, args);
+        }
+    }
+    else if (auto e = dynamic_pointer_cast<StrExp>(ep)) {
+        return valp(new ValueStr(e->v));
+    }
+    else if (auto e = dynamic_pointer_cast<TernaryExp>(ep)) {
+        auto vcond = eval(vars, e->cond);
+        if (vcond->isTrue()) return eval(vars, e->then);
+        else return eval(vars, e->els);
+    }
+    else if (auto e = dynamic_pointer_cast<FuncDefExp>(ep)) {
+        return valp(new ValueFunction(e->args, e->body));
+    }
+    else if (auto e = dynamic_pointer_cast<IndexExp>(ep)) {
+        auto lv = eval(vars, e->l);
+        auto iv = eval(vars, e->i);
+        return lv->at(iv->getInt());
+    }
+    else if (auto e = dynamic_pointer_cast<MemberExp>(ep)) {
+        auto lv = eval(vars, e->l);
+        return lv->get(e->member);
+    }
+    else throw runtime_error("Unknown statement");
+}
+
+valp Script::eval(valp vars, expp ep) {
     try {
-        valp v;
-
-        ValueMap& vars = *dynamic_pointer_cast<ValueMap>(vars0);
-
-        if (auto e = dynamic_pointer_cast<IntExp>(ep)) {
-            v = valp(new ValueInt(e->value));
-        }
-        else if (auto e = dynamic_pointer_cast<FloatExp>(ep)) {
-            v = valp(new ValueFloat(e->value));
-        }
-        else if (auto e = dynamic_pointer_cast<IdExp>(ep)) {
-            auto it = vars.find(e->name);
-            if (it == vars.end()) throw runtime_error("Unknown variable");
-            v = it->second;
-        }
-        else if (auto e = dynamic_pointer_cast<BinOpExp>(ep)) {
-            auto v1 = eval(vars0, e->l);
-            auto v2 = eval(vars0, e->r);
-            v = v1->binop(e->op, v2);
-        }
-        else if (auto e = dynamic_pointer_cast<UnOpExp>(ep)) {
-            auto v1 = eval(vars0, e->l);
-            v = v1->unop(e->op);
-        }
-        else if (auto e = dynamic_pointer_cast<MapDefExp>(ep)) {
-            auto m = new ValueMap({});
-            for (auto f : e->values) {
-                m->insert(make_pair(f.first, eval(vars0, f.second)));
-            }
-            v = valp(m);
-        }
-        else if (auto e = dynamic_pointer_cast<ListDefExp>(ep)) {
-            auto m = new ValueList({});
-            for (auto f : e->values) {
-                m->push_back(eval(vars0, f));
-            }
-            v = valp(m);
-        } 
-        else if (auto e = dynamic_pointer_cast<RangeDefExp>(ep)) {
-            auto beg  = dynamic_pointer_cast<ValueInt>(eval(vars0, e->beg));
-            auto end  = dynamic_pointer_cast<ValueInt>(eval(vars0, e->end));
-            auto step = dynamic_pointer_cast<ValueInt>(eval(vars0, e->step));
-            if (!beg || !end || !step) throw runtime_error("Ranges must contain ints");
-            auto m = new ValueList({});
-            for (auto i=beg->value;i<=end->value;i+=step->value) {
-                m->push_back(valp(new ValueInt(i)));
-            }
-            v = valp(m);
-        }
-        else if (auto e = dynamic_pointer_cast<FuncCallExp>(ep)) {
-            // extract args
-            vector<valp> args;
-            for (auto a : e->a) {
-                args.push_back(eval(vars0, a));
-            }
-            // Global functions
-            bool wasGlobal = !e->ctx;
-            if (!e->ctx) {
-                if (e->f == "assert" && args.size() == 1) {
-                    if (auto val = dynamic_pointer_cast<ValueInt>(args[0])) {
-                        if (val->value==0) throw runtime_error("Assertion failed");
-                    } else throw runtime_error("Can't assert non-int");
-                }
-                else wasGlobal = false;
-            }
-            if (!wasGlobal) {
-                // Get context for `this`
-                valp vctx = (e->ctx)?eval(vars0, e->ctx):vars0;
-                // If `this` is a map call function
-                if (dynamic_pointer_cast<ValueMap>(vctx)) {
-                    v = evalFunc(vars0, vctx, e->f, args);
-                } else if (auto list = dynamic_pointer_cast<ValueList>(vctx)) {
-                    if (e->f == "length" && args.size() == 0) {
-                        v = valp(new ValueInt(list->size()));
-                    } else throw runtime_error("Unknown method for list");
-                } else throw runtime_error("Can't call function on this type");
-            }
-        }
-        else if (auto e = dynamic_pointer_cast<StrExp>(ep)) {
-            v = valp(new ValueStr(e->v));
-        }
-        else if (auto e = dynamic_pointer_cast<TernaryExp>(ep)) {
-            auto vcond = eval(vars0, e->cond);
-            if (auto vi = dynamic_pointer_cast<ValueInt>(vcond)) {
-                if (vi->value) v = eval(vars0, e->then);
-                else v = eval(vars0, e->els);
-            } else throw runtime_error("Can't evaluate condition with non-int");
-        }
-        else if (auto e = dynamic_pointer_cast<FuncDefExp>(ep)) {
-            v = valp(new ValueFunction(e->args, e->body));
-        }
-        else if (auto e = dynamic_pointer_cast<IndexExp>(ep)) {
-            auto lv = eval(vars0, e->l);
-            auto iv = eval(vars0, e->i);
-            if (auto l = dynamic_pointer_cast<ValueMap>(lv)) {
-                if (auto i = dynamic_pointer_cast<ValueStr>(iv)) {
-                    v = l->at(i->value);
-                }
-                else throw runtime_error("Can't access map with non-string");
-            }
-            else if (auto l = dynamic_pointer_cast<ValueList>(lv)) {
-                if (auto i = dynamic_pointer_cast<ValueInt>(iv)) {
-                    v = l->at(i->value);
-                }
-                else throw runtime_error("Can't access list with non-int");
-            }
-            else throw runtime_error("Can't access non-container");
-        }
-        else throw runtime_error("Unknown statement");
-
+        valp v = eval1(vars, ep);
         // if values refer to outside references, return the value of these refs
         if (auto vv = dynamic_pointer_cast<ValueExtern<int>>(v)) {
             return valp(new ValueInt(vv->ref));
@@ -339,44 +311,16 @@ valp Script::eval(valp vars0, expp ep) {
 }
 
 // TODO change grammar to reflect lvalues most, and allow creation of members of list elements
-valp& Script::getRef(valp vars0, expp lp, bool create) {
+valp& Script::evalRef(valp vars, expp lp) {
     try {
-        ValueMap& vars = *dynamic_pointer_cast<ValueMap>(vars0);
-
         if (auto l = dynamic_pointer_cast<IdExp>(lp)) {
-            auto it = vars.find(l->name);
-            if (it == vars.end()) {
-                if (!create) throw runtime_error("No var or member");
-                auto it2 = vars.insert(pair<string, valp>(l->name, nullptr));
-                return it2.first->second;
-            } else {
-                return it->second;
-            }
+            return vars->getRef(l->name);
         } else if (auto l = dynamic_pointer_cast<IndexExp>(lp)) {
-            auto l0 = getRef(vars0, l->l, false);
-            if (auto l1 = dynamic_pointer_cast<ValueMap>(l0)) {
-                auto ei = eval(vars0, l->i);
-                if (auto e = dynamic_pointer_cast<ValueStr>(ei)) {
-                    auto it = l1->find(e->value);
-                    if (it == vars.end()) {
-                        if (!create) throw runtime_error("No var or member");
-                        auto it2 = l1->insert(pair<string, valp>(e->value, nullptr));
-                        return it2.first->second;
-                    } else {
-                        return it->second;
-                    }
-                }
-                throw runtime_error("Invalid exp");
-            } else if (auto l1 = dynamic_pointer_cast<ValueList>(l0)) {
-                auto ei = eval(vars0, l->i);
-                if (auto e = dynamic_pointer_cast<ValueInt>(ei)) {
-                    if (e->value >= l1->size()) {
-                        l1->resize(e->value+1);
-                    }
-                    return l1->at(e->value);
-                }
-            }
-            throw runtime_error("Can't access member");
+            auto l0 = evalRef(vars, l->l);
+            return l0->atRef(eval(vars, l->i)->getInt());
+        } else if (auto l = dynamic_pointer_cast<MemberExp>(lp)) {
+            auto l0 = evalRef(vars, l->l);
+            return l0->getRef(l->member);
         }
         throw runtime_error("Can't get ref from this exp");
     } catch (runtime_error e) {
