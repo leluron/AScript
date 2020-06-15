@@ -4,3 +4,4 @@ grammar_tests
 test1
 unit_tests
 test_log
+test_error_log
