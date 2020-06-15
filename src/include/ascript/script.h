@@ -177,10 +177,17 @@ struct ValueNativeFunc : public Value  {
     }
 };
 
+struct ValueExternBase {
+    virtual void assign(valp r)=0;
+    virtual valp get()=0;
+};
+
 // Reference to native variable
 template <typename T>
-struct ValueExtern : public Value {
+struct ValueExtern : public Value, public ValueExternBase {
     ValueExtern(T& ref) : ref(ref) {}
+    virtual void assign(valp r) override;
+    virtual valp get() override;
     virtual std::string print() {
         std::string s = "externvalue<";
         s += typeid(T).name();

@@ -100,22 +100,8 @@ void Script::exec(valp vars,statp sp) {
             // get reference to left side
             auto& v = evalRef(vars, s->left);
             // Specialization for extern values
-            if (auto vv = dynamic_pointer_cast<ValueExtern<int>>(v)) {
-                if (auto rv = dynamic_pointer_cast<ValueInt>(r))
-                    vv->ref = rv->value;
-                else if (auto rv = dynamic_pointer_cast<ValueFloat>(r))
-                    vv->ref = (int)rv->value;
-                else throw runtime_error("Uncompatible types");
-            } else if (auto vv = dynamic_pointer_cast<ValueExtern<float>>(v)) {
-                if (auto rv = dynamic_pointer_cast<ValueInt>(r))
-                    vv->ref = (float)rv->value;
-                else if (auto rv = dynamic_pointer_cast<ValueFloat>(r))
-                    vv->ref = rv->value;
-                else throw runtime_error("Uncompatible types");
-            } else if (auto vv = dynamic_pointer_cast<ValueExtern<string>>(v)) {
-                if (auto rv = dynamic_pointer_cast<ValueStr>(r))
-                    vv->ref = rv->value;
-                else throw runtime_error("Uncompatible types");
+            if (auto vv = dynamic_pointer_cast<ValueExternBase>(v)) {
+                vv->assign(r);
             } else {
                 // if no extern just point to right side value
                 v = r;
@@ -232,14 +218,14 @@ valp Script::eval1(valp vars, expp ep) {
     else if (auto e = dynamic_pointer_cast<MapDefExp>(ep)) {
         auto m = new ValueMap({});
         for (auto f : e->values) {
-            m->vars.insert(make_pair(f.first, eval(vars, f.second)));
+            m->getRef(f.first) = eval(vars, f.second);
         }
         return valp(m);
     }
     else if (auto e = dynamic_pointer_cast<ListDefExp>(ep)) {
         auto m = new ValueList({});
-        for (auto f : e->values) {
-            m->values.push_back(eval(vars, f));
+        for (int i=0;i<e->values.size();i++) {
+            m->atRef(i) = eval(vars, e->values[i]);
         }
         return valp(m);
     } 
@@ -297,12 +283,8 @@ valp Script::eval(valp vars, expp ep) {
     try {
         valp v = eval1(vars, ep);
         // if values refer to outside references, return the value of these refs
-        if (auto vv = dynamic_pointer_cast<ValueExtern<int>>(v)) {
-            return valp(new ValueInt(vv->ref));
-        } else if (auto vv = dynamic_pointer_cast<ValueExtern<float>>(v)) {
-            return valp(new ValueFloat(vv->ref));
-        } else if (auto vv = dynamic_pointer_cast<ValueExtern<string>>(v)) {
-            return valp(new ValueStr(vv->ref));
+        if (auto vv = dynamic_pointer_cast<ValueExternBase>(v)) {
+            return vv->get();
         } else {
             return v;
         }
@@ -311,7 +293,7 @@ valp Script::eval(valp vars, expp ep) {
     }
 }
 
-// TODO change grammar to reflect lvalues most, and allow creation of members of list elements
+// Get references to values for assignment
 valp& Script::evalRef(valp vars, expp lp) {
     try {
         if (auto l = dynamic_pointer_cast<IdExp>(lp)) {
