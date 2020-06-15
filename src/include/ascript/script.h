@@ -27,9 +27,9 @@ using var = std::map<std::string, valp>;
 struct Value {
     virtual ~Value() {};
     // Unary operator
-    virtual valp unop(std::string op) { throw std::runtime_error("Unsupported");}
+    virtual valp unop(std::string op) { throw std::runtime_error("Unsupported Unop");}
     // Binary operator
-    virtual valp binop(std::string op, valp r) { throw std::runtime_error("Unsupported");}
+    virtual valp binop(std::string op, valp r) { throw std::runtime_error("Unsupported Binop");}
     virtual size_t length() { throw std::runtime_error("Not iterable");}
     virtual valp at(int id) { throw std::runtime_error("Not iterable");}
     virtual valp& atRef(int id) { throw std::runtime_error("Not iterable");}
@@ -77,8 +77,6 @@ struct ValueFloat : public Value {
 // Names associated to values
 struct ValueMap : public Value {
     ValueMap(var vars) : vars(vars) {}
-    virtual valp unop(std::string op) { throw std::runtime_error("Unsupported");}
-    virtual valp binop(std::string op, valp r) { throw std::runtime_error("Unsupported");}
     virtual valp get(std::string mem) { 
         return vars[mem];
     }
@@ -102,8 +100,6 @@ struct ValueMap : public Value {
 // Vector of values
 struct ValueList : public Value {
     ValueList(std::vector<valp> values) : values(values) {}
-    virtual valp unop(std::string op) { throw std::runtime_error("Unsupported");}
-    virtual valp binop(std::string op, valp r) { throw std::runtime_error("Unsupported");}
     virtual size_t length() { return values.size(); }
     virtual valp at(int i) { return values.at(i); }
     virtual valp& atRef(int i) {
@@ -131,8 +127,6 @@ struct ValueRange : public Value {
         if (step == 0) throw std::runtime_error("Can't have a step of 0");
         this->step = step;
     }
-    virtual valp unop(std::string op) { throw std::runtime_error("Unsupported");}
-    virtual valp binop(std::string op, valp r) { throw std::runtime_error("Unsupported");}
     virtual size_t length() { return ((end-beg)/step)+1; }
     virtual valp at(int i) { return valp(new ValueInt(beg + step*i));}
     virtual valp& atRef(int id) { throw std::runtime_error("Can't access range as left-value");}
@@ -149,7 +143,6 @@ struct ValueRange : public Value {
 // String
 struct ValueStr : public Value {
     ValueStr(std::string v) : value(v) {}
-    virtual valp unop(std::string op) { throw std::runtime_error("Unsupported");}
     virtual valp binop(std::string op, valp r);
     virtual std::string getStr() { return value; }
     virtual std::string print() {
@@ -165,8 +158,6 @@ struct ValueFunction : public Value {
     /* args = names of arguments
        body = function body */
     ValueFunction(std::vector<std::string> args, statp body) : args(args), body(body) {}
-    virtual valp unop(std::string op) { throw std::runtime_error("Unsupported");}
-    virtual valp binop(std::string op, valp r) { throw std::runtime_error("Unsupported");}
     virtual std::string print() {
         std::stringstream ss;
         ss << "function(" << args.size() << ")";
@@ -180,8 +171,6 @@ struct ValueFunction : public Value {
 struct ValueNativeFunc : public Value  {
     /* f = native function wrapper, takes a list of values as arguments, returns any value */
     ValueNativeFunc(std::function<valp(std::vector<valp>)> f) : f(f) {}
-    virtual valp unop(std::string op) { throw std::runtime_error("Unsupported");}
-    virtual valp binop(std::string op, valp r) { throw std::runtime_error("Unsupported");}
     std::function<valp(std::vector<valp>)> f;
     virtual std::string print() {
         return "nativefunction";
@@ -192,8 +181,6 @@ struct ValueNativeFunc : public Value  {
 template <typename T>
 struct ValueExtern : public Value {
     ValueExtern(T& ref) : ref(ref) {}
-    virtual valp unop(std::string op) { throw std::runtime_error("Unsupported");}
-    virtual valp binop(std::string op, valp r) { throw std::runtime_error("Unsupported");}
     virtual std::string print() {
         std::string s = "externvalue<";
         s += typeid(T).name();

@@ -199,6 +199,7 @@ valp Script::evalFunc(valp ctx, string fn, vector<valp> args) {
         exec(env, f->body);
         // extract return value
         auto v = ret;
+        if (!v) v = valp(new ValueNone());
         // as we come back to the underlying code reset return indicator
         ret = nullptr;
         return v;
