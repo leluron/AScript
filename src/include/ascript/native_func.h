@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <functional>
+#include <stdexcept>
 
 // Convert return value into script value
 template<typename T> 
